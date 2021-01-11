@@ -110,10 +110,8 @@ public class MangoDispatcherServlet extends HttpServlet {
     private void putService(Class<?> aClass) throws InstantiationException, IllegalAccessException {
         MangoService service = aClass.getAnnotation(MangoService.class);
         String value = service.value();
-        if (!"".equals(value.trim())) {
-            //指定ID
-        } else {
-            //没有指定 类名首字母
+        if ("".equals(value.trim())) {
+            //没有指定ID 类名首字母
             value = lowerFirst(aClass.getSimpleName());
         }
         iocMap.put(value, aClass.newInstance());
