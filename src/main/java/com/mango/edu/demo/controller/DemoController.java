@@ -20,6 +20,7 @@ public class DemoController {
     @MangoAutowired
     private DemoService demoService;
 
+    @MangoRequestMapping("/query")
     public String query(HttpServletRequest request, HttpServletResponse response, String name) {
         return demoService.get(name);
     }

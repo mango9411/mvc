@@ -7,10 +7,10 @@
 
     <servlet>
         <servlet-name>mango_mvc</servlet-name>
-        <servlet-class id="com.mango.edu.mvcframework.servlet.MangoDispatcherServlet"></servlet-class>
+        <servlet-class>com.mango.edu.mvcframework.servlet.MangoDispatcherServlet</servlet-class>
         <init-param>
             <param-name>contextConfigLocation</param-name>
-            <param-value>classpath*:springMVC.properties</param-value>
+            <param-value>springMVC.properties</param-value>
         </init-param>
     </servlet>
 

@@ -1,20 +1,29 @@
 package com.mango.edu.mvcframework.servlet;
 
+import com.mango.edu.mvcframework.annotations.MangoAutowired;
 import com.mango.edu.mvcframework.annotations.MangoController;
+import com.mango.edu.mvcframework.annotations.MangoRequestMapping;
 import com.mango.edu.mvcframework.annotations.MangoService;
+import com.mango.edu.mvcframework.pojo.Handler;
+import org.apache.commons.lang3.StringUtils;
 
 import javax.servlet.ServletConfig;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @author mango
@@ -38,18 +47,69 @@ public class MangoDispatcherServlet extends HttpServlet {
      */
     private Map<String, Object> iocMap = new ConcurrentHashMap<>();
 
+    /**
+     * url 绑定 方法的 map
+     */
+    //    private Map<String, Method> handlerMapping = new ConcurrentHashMap<>();
+    private List<Handler> handlerMapping = new ArrayList<>();
+
     @Override
-    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws IOException {
         doPost(req, resp);
     }
 
     @Override
-    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        // TODO: 2021/1/11 处理请求
+    protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws IOException {
+        //处理请求
+        //        String requestURI = req.getRequestURI();
+        //        Method method = handlerMapping.get(requestURI);
+        //        method.invoke()
+        try {
+            Handler handler = getHandler(req);
+            if (handler == null) {
+                resp.getWriter().write("404 not found");
+            }
+            //设置匹配到的方法参数
+            Class<?>[] parameterTypes = handler.getMethod().getParameterTypes();
+            Object[] args = new Object[parameterTypes.length];
+            Map<String, String[]> parameterMap = req.getParameterMap();
+            for (Map.Entry<String, String[]> entry : parameterMap.entrySet()) {
+                String value = StringUtils.join(entry.getValue(), ",");
+                if (!handler.getParams().containsKey(entry.getKey())) {
+                    continue;
+                }
+                Integer integer = handler.getParams().get(entry.getKey());
+                args[integer] = value;
+            }
+            Integer reqInteger = handler.getParams().get(HttpServletRequest.class.getSimpleName());
+            args[reqInteger] = req;
+            Integer respInteger = handler.getParams().get(HttpServletResponse.class.getSimpleName());
+            args[respInteger] = resp;
+            handler.getMethod().invoke(handler.getController(), args);
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        } catch (InvocationTargetException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private Handler getHandler(HttpServletRequest req) {
+        if (handlerMapping.isEmpty()) {
+            return null;
+        }
+        String url = req.getRequestURI();
+        for (Handler handler : handlerMapping) {
+            Matcher matcher = handler.getPattern().matcher(url);
+            if (!matcher.matches()) {
+                continue;
+            }
+            return handler;
+        }
+        return null;
     }
 
     @Override
-    public void init(ServletConfig config) throws ServletException {
+    public void init(ServletConfig config) {
         //  1.加载配置文件 springmvc.properties
         String configLocation = config.getInitParameter("contextConfigLocation");
         doLoadConfig(configLocation);
@@ -70,12 +130,66 @@ public class MangoDispatcherServlet extends HttpServlet {
      * 构造一个HandlerMapping(处理器映射器, 将配置好的url和method建立映射关系)
      */
     private void doInitHandlerMapping() {
+        if (iocMap.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : iocMap.entrySet()) {
+            Class<?> aClass = entry.getValue().getClass();
+            if (!aClass.isAnnotationPresent(MangoController.class)) {
+                continue;
+            }
+            String baseUrl = "";
+            if (aClass.isAnnotationPresent(MangoRequestMapping.class)) {
+                baseUrl = aClass.getAnnotation(MangoRequestMapping.class).value();
+            }
+            for (Method method : aClass.getMethods()) {
+                if (!method.isAnnotationPresent(MangoRequestMapping.class)) {
+                    continue;
+                }
+                MangoRequestMapping annotation = method.getAnnotation(MangoRequestMapping.class);
+                String methodUrl = annotation.value();
+                String url = baseUrl + methodUrl;
+                Handler handler = new Handler(entry.getValue(), method, Pattern.compile(url));
+                Parameter[] parameters = method.getParameters();
+                for (int i = 0; i < parameters.length; i++) {
+                    Parameter parameter = parameters[i];
+                    if (parameter.getType() == HttpServletRequest.class || parameter.getType() == HttpServletResponse.class) {
+                        handler.getParams().put(parameter.getType().getSimpleName(), i);
+                    } else {
+                        handler.getParams().put(parameter.getName(), i);
+                    }
+                }
+                handlerMapping.add(handler);
+            }
+        }
     }
 
     /**
      * 依赖注入
      */
     private void doAutowired() {
+        if (iocMap.isEmpty()) {
+            return;
+        }
+        for (Map.Entry<String, Object> entry : iocMap.entrySet()) {
+            Field[] fields = entry.getValue().getClass().getDeclaredFields();
+            try {
+                for (Field field : fields) {
+                    if (!field.isAnnotationPresent(MangoAutowired.class)) {
+                        continue;
+                    }
+                    MangoAutowired annotation = field.getAnnotation(MangoAutowired.class);
+                    String beanId = annotation.value();
+                    if ("".equals(beanId.trim())) {
+                        beanId = field.getType().getName();
+                    }
+                    field.setAccessible(true);
+                    field.set(entry.getValue(), iocMap.get(beanId));
+                }
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     /**
@@ -144,12 +258,12 @@ public class MangoDispatcherServlet extends HttpServlet {
         //是否多个文件或文件夹
         File[] files = file.listFiles();
         for (File file1 : files) {
-            if (file.isDirectory()) {
+            if (file1.isDirectory()) {
                 //如果是目录 进行递归
-                doScanAnnotations(path + "." + file1.getName());
+                doScanAnnotations(packagePath + "." + file1.getName());
             } else if (file1.getName().endsWith(".class")) {
                 //不是目录  那就是class文件  替换掉后缀 拿到className
-                String className = path + "." + file1.getName().replaceAll(".class", "");
+                String className = packagePath + "." + file1.getName().replaceAll(".class", "");
                 clasNames.add(className);
             }
         }
