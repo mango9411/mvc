@@ -114,7 +114,7 @@ public class MangoDispatcherServlet extends HttpServlet {
                         if (!handler.getParams().containsValue(userName)) {
                             //如果map里没有value数组里的值， 证明访问用户无访问权限
                             try {
-//                                resp.getWriter().write("当前用户无访问权限"); 中文乱码 所以改为输出数字
+//                                resp.getWriter().write("当前用户无访问权限"); 中文乱码 所以改为输出数字 引入jar包有点麻烦
                                 resp.getWriter().write("1231231");
                             } catch (IOException e) {
                                 e.printStackTrace();
