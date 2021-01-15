@@ -4,6 +4,7 @@ import com.mango.edu.mvcframework.annotations.MangoAutowired;
 import com.mango.edu.mvcframework.annotations.MangoController;
 import com.mango.edu.mvcframework.annotations.MangoRequestMapping;
 import com.mango.edu.mvcframework.annotations.MangoService;
+import com.mango.edu.mvcframework.annotations.Security;
 import com.mango.edu.mvcframework.pojo.Handler;
 import org.apache.commons.lang3.StringUtils;
 
@@ -65,7 +66,7 @@ public class MangoDispatcherServlet extends HttpServlet {
         //        Method method = handlerMapping.get(requestURI);
         //        method.invoke()
         try {
-            Handler handler = getHandler(req);
+            Handler handler = getHandler(req, resp);
             if (handler == null) {
                 resp.getWriter().write("404 not found");
             }
@@ -93,7 +94,7 @@ public class MangoDispatcherServlet extends HttpServlet {
         }
     }
 
-    private Handler getHandler(HttpServletRequest req) {
+    private Handler getHandler(HttpServletRequest req, HttpServletResponse resp) {
         if (handlerMapping.isEmpty()) {
             return null;
         }
@@ -102,6 +103,25 @@ public class MangoDispatcherServlet extends HttpServlet {
             Matcher matcher = handler.getPattern().matcher(url);
             if (!matcher.matches()) {
                 continue;
+            }
+            Security security = handler.getController().getClass().getAnnotation(Security.class);
+            if (null != security) {
+                //根据注解属性值  拦截用户
+                String[] value = security.value();
+                if (null != value && value.length > 0) {
+                    //属性不为空时拦截
+                    for (String userName : value) {
+                        if (!handler.getParams().containsValue(userName)) {
+                            //如果map里没有value数组里的值， 证明访问用户无访问权限
+                            try {
+//                                resp.getWriter().write("当前用户无访问权限"); 中文乱码 所以改为输出数字
+                                resp.getWriter().write("1231231");
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
+                }
             }
             return handler;
         }

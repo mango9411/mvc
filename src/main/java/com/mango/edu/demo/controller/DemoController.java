@@ -4,6 +4,7 @@ import com.mango.edu.demo.service.DemoService;
 import com.mango.edu.mvcframework.annotations.MangoAutowired;
 import com.mango.edu.mvcframework.annotations.MangoController;
 import com.mango.edu.mvcframework.annotations.MangoRequestMapping;
+import com.mango.edu.mvcframework.annotations.Security;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -13,6 +14,7 @@ import javax.servlet.http.HttpServletResponse;
  * @date 2021/1/11 21:10
  * @description:
  */
+@Security(value = {"mango", "zhangsan"})
 @MangoController
 @MangoRequestMapping("/demo")
 public class DemoController {
